@@ -1,0 +1,89 @@
+#include <Adafruit_Fingerprint.h>
+#include <SoftwareSerial.h>
+
+SoftwareSerial mySerial(2, 3);  // TX, RX
+Adafruit_Fingerprint finger(&mySerial);
+
+void setup() {
+  Serial.begin(9600);
+  finger.begin(57600);
+  
+  if (finger.verifyPassword()) {
+    Serial.println("Fingerprint sensor found!");
+  } else {
+    Serial.println("Fingerprint sensor not found. Check wiring!");
+    while (1);
+  }
+}
+
+void loop() {
+  Serial.println("Place your finger on the sensor to enroll a new fingerprint.");
+  delay(2000);
+  
+  int id = getFingerprintID();
+  if (id != -1) {
+    Serial.print("Fingerprint ID ");
+    Serial.print(id);
+    Serial.println(" already exists!");
+    return;
+  }
+
+  Serial.println("Ready to enroll. Enter the fingerprint ID you want to assign (1-127): ");
+  while (!Serial.available());
+  int newID = Serial.parseInt();
+  if (newID < 1 || newID > 127) {
+    Serial.println("Invalid ID. Must be between 1 and 127.");
+    return;
+  }
+  
+  Serial.print("Enrolling ID #");
+  Serial.println(newID);
+  
+  if (enrollFingerprint(newID)) {
+    Serial.println("Fingerprint enrolled successfully!");
+  } else {
+    Serial.println("Failed to enroll fingerprint.");
+  }
+}
+
+int getFingerprintID() {
+  int result = finger.getImage();
+  if (result != FINGERPRINT_OK) return -1;
+
+  result = finger.image2Tz();
+  if (result != FINGERPRINT_OK) return -1;
+
+  result = finger.fingerFastSearch();
+  if (result != FINGERPRINT_OK) return -1;
+
+  return finger.fingerID;
+}
+
+bool enrollFingerprint(int id) {
+  int result;
+  
+  Serial.println("Place your finger on the sensor...");
+  while ((result = finger.getImage()) != FINGERPRINT_OK);
+  
+  result = finger.image2Tz(1);
+  if (result != FINGERPRINT_OK) return false;
+
+  Serial.println("Remove your finger...");
+  delay(2000);
+
+  while (finger.getImage() != FINGERPRINT_NOFINGER);
+  
+  Serial.println("Place the same finger again...");
+  while ((result = finger.getImage()) != FINGERPRINT_OK);
+  
+  result = finger.image2Tz(2);
+  if (result != FINGERPRINT_OK) return false;
+
+  result = finger.createModel();
+  if (result != FINGERPRINT_OK) return false;
+
+  result = finger.storeModel(id);
+  if (result != FINGERPRINT_OK) return false;
+
+  return true;
+}
